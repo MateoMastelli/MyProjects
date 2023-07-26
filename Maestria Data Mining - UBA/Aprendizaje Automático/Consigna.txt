@@ -1,0 +1,37 @@
+Consignas
+Properati disponibiliza información sobre avisos de inmuebles de toda Latinoamérica desde 2015. En este TP se analizará únicamente la información de los inmuebles de Capital Federal que se encuentran en venta. El objetivo es predecir el precio (price para regresión y price_respuesta para clasificación) de los mismos utilizando el conjunto de datos subido al campus.
+
+El presente trabajo será grupal y deberá estar compuesto por 3 o 4 integrantes. Se podrán evaluar los contenidos del TP durante el parcial posterior a la entrega. Todos los integrantes deben tener conocimiento del desarrollo del trabajo.
+
+Se deberá elaborar un informe siguiendo el formato detallado en Formato_informes.docx, disponible en el campus, y entregarlo en formato .pdf. La entrega deberá estar acompañada de la Jupyter Notebook en Python, utilizada para generar los resultados.
+
+Para realizar el informe deberán responder y documentarse al menos los siguientes puntos (queda a su criterio como distribuir el contenido en cada grupo de secciones):
+
+En las secciones: Datos, Materiales y Métodos
+
+¿Qué información (atributos) hay disponibles para hacer la predicción?
+Caracterizar cada variable (tipo de atributos -categóricos, numéricos, ordinales-, rangos de valores, etc. ¿Hay valores faltantes?
+Seleccionar el subconjunto de columnas que les parezcan relevantes al problema de predicción del valor de la propiedad. Justificar las columnas seleccionadas y las que no lo fueron.
+Realizar una separación de datos en conjuntos de desarrollo y de evaluación.
+En las secciones: Resultados y Discusión
+
+Entrenar en los datos de desarrollo por validación cruzada buscando optimizar los hiperparámetros para clasificar el rango de precio los siguientes modelos:
+
+modelos clásicos: para clasificacion usar al menos 1 modelo clásico (no árbol) entre KNN, SVM, NB y para regresión usar al menos 1 modelo entre KNN, SVM, RL
+modelos de árboles: un árbol de decisión para clasificación y otro para regresión
+modelos de ensambles: el que quieran (RandomForest, GradientBoosting, etc.)
+En total serán al menos 3 modelos para cada problema.
+
+Usar random search y 5-fold cross-validation sobre el conjunto de desarrollo para explorar muchas combinaciones posibles de valores. Elija la métrica a optimizar. Justifique. Ej.: para los hiperparámetros principales del DecisionTreeClassifier probar diferentes criterios de partición (criterion), profundidad máxima del árbol (max_depth), y cantidad mínima de samples por hoja (min_samples_leaf).
+
+Evaluar y reportar las métricas de clasificación que crean relevantes tanto en el conjunto de desarrollo como el de evaluación. Justifique las métricas seleccionadas.
+
+Comparar el desempeño obtenido con modelos clásicos y basados en árboles contra los modelos de ensambles. Cuáles seleccionaría?
+
+Graficar resultados obtenidos, por ejemplo en un barplot. Graficar el mejor árbol obtenido.
+
+Para el modelo de árboles y el de ensambles declarar ¿Cuál variable considera que fue más importante para la decisión? Responder esta pregunta a partir de gráficos y mediante el cálculo de importancia de atributos.
+
+Conclusión
+
+A partir de los resultados obtenidos ¿Qué recomendación/es les daría a aquellas personas que pretendan comprar una propiedad en CABA? ¿Considera que haría falta incluir alguna variable relevante en la clasificación?

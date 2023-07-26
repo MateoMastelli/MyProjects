@@ -1,0 +1,894 @@
+---
+title:  "<center> <h1>Análisis Inteligente de Datos\\
+
+Trabajo Práctico N° 1\\ 
+
+1° C 2023" 
+  
+author: "<left> <h2>Alumno: Mastelli Mateo"
+output: html_document
+header-includes:
+  - \renewcommand{\and}{\\}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F)
+```
+
+```{r librerias, warning=F, message=F, warn.conflicts=FALSE}
+library(dplyr)
+library(readxl)
+library(psych)
+library(moments)
+library(ggplot2)
+require(readxl)
+library(stats)
+library(car)
+library(knitr)
+library(magrittr)
+```
+
+
+
+
+
+### 1. 
+**Para la base de datos seleccionada genere una muestra aleatoria estratificada balanceada por “depósito” de tamaño n = 2000 utilizando como semilla los últimos tres dígitos del DNI/PASAPORTE. Guarde los datos en un archivo y realice todo el trabajo práctico con la muestra generada.práctico con la muestra generada.**
+
+Se cargan los datos de la base de datos seleccionada en R
+```{r }
+datos <- read.csv("data.csv",sep=',')
+```
+
+Mi DNI es 40.009.997 por ende se establece 997 como seed
+```{r}
+set.seed(997)
+```
+
+Se crea una muestra estratificada de n=2000
+```{r}
+muestra <- datos %>%
+  group_by(deposit) %>%
+  sample_n(1000)
+```
+
+Se verifica que la muestra esté balanceada por deposito
+```{r}
+table(muestra$deposit)
+```
+Se Guarda internamente la muestra con extesión csv
+```{r}
+write.csv(muestra, "muestra.csv", row.names=F)
+```
+
+
+
+
+
+### 2.
+**Realice un análisis estadístico de cada una de las variables numéricas para cada valor de depósito. Presente la información en forma tabular y conteniendo las siguientes medidas descriptivas: Cantidad de datos, mínimo, máximo, media, mediana, moda, varianza, desviación estándar, coeficiente de variación, cuartil 1, cuartil 3, rango intercuartílico, MAD, asimetría, curtosis.**
+
+
+```{r}
+muestra <- read.csv("muestra.csv",sep=',')
+
+
+#Agrupar los datos por depósit y resumir las estadísticas descriptivas para cada variable numérica
+datos_num <- as.data.frame(select_if(muestra, is.numeric) %>%
+                             mutate(deposit = muestra$deposit))
+
+resumen_dep <- datos_num %>%
+  group_by(deposit) %>%
+  summarise(across(where(is.numeric), list(n = ~n(),
+                                           min = ~min(.),
+                                           max = ~max(.),
+                                           mean = ~mean(.),
+                                           median = ~median(.),
+                                           mode = ~names(which.max(table(.))),
+                                           var = ~var(.),
+                                           sd = ~sd(.),
+                                           cv = ~sd(.)/mean(.),
+                                           q1 = ~quantile(., 0.25),
+                                           q3 = ~quantile(., 0.75),
+                                           iqr = ~IQR(.),
+                                           mad = ~mad(.),
+                                           skew = ~moments::skewness(.),
+                                           kurt = ~moments::kurtosis(.) - 3)))
+
+
+kable(resumen_dep)
+```
+
+
+
+
+
+
+### 3.
+**Represente gráficamente cada variable numérica eligiendo el gráfico que considere apropiado. Considere la posibilidad de generar rangos de datos para su análisis y representación gráfica de las variables.**
+
+```{r, echo=FALSE}
+hist(muestra$age, main = 'Histograma Edad',xlab = 'Edad',
+     ylab='Frecuencia',col='lightblue',density=18,angle=60,border="darkblue", breaks=20)
+
+hist(muestra$balance, main = 'Histograma balance',xlab = 'balance',
+     ylab='Frecuencia',col='lightblue',density=18,angle=60,border="darkblue", breaks=20)
+
+hist(muestra$day, main = 'Histograma day',xlab = 'day',
+     ylab='Frecuencia',col='lightblue',density=18,angle=60,border="darkblue", breaks=20)
+
+hist(muestra$duration, main = 'Histograma duration',xlab = 'duration',
+     ylab='Frecuencia',col='lightblue',density=18,angle=60,border="darkblue", breaks=20)
+
+hist(muestra$campaign, main = 'Histograma campaign',xlab = 'campaign',
+     ylab='Frecuencia',col='lightblue',density=18,angle=60,border="darkblue", breaks=20)
+
+hist(muestra$pdays, main = 'Histograma pdays',xlab = 'pdays',
+     ylab='Frecuencia',col='lightblue',density=18,angle=60,border="darkblue", breaks=20)
+
+hist(muestra$previous, main = 'Histograma previous',xlab = 'previous',
+     ylab='Frecuencia',col='lightblue',density=18,angle=60,border="darkblue", breaks=20)
+
+boxplot(datos_num[, !names(datos_num) %in% ("deposit")], main='Múltiples boxplot\nde distintas variables')
+
+```
+
+
+
+
+
+### 4.
+**Presente una tabla de frecuencias y porcentaje para la variable “marital” (estado civil) según el nivel de la variable “deposit”.**
+
+```{r}
+# Obtener la tabla de frecuencias
+tabla <- table(muestra$marital, muestra$deposit)
+
+# Agregar los totales por fila
+tabla_con_totales <- addmargins(tabla, margin = 1)
+
+```
+
+Tabla de frecuencias
+```{r, echo=FALSE}
+# Imprimir la tabla
+print(tabla_con_totales)
+```
+
+
+```{r}
+# Calcular los porcentajes por fila
+tabla_porcentajes <- prop.table(tabla_con_totales, margin = 1)
+```
+
+Tabla de porcentajes
+```{r, echo=FALSE}
+# Imprimir la tabla
+print(tabla_porcentajes)
+```
+
+
+
+
+
+
+### 5.
+**Realice un gráfico para representar la tabla construida en el punto 4.**
+
+
+```{r}
+# Convertir la tabla en un data frame
+tabla_porcentajes_df <- as.data.frame.matrix(tabla_porcentajes)
+tabla_porcentajes_df <- t(tabla_porcentajes_df[1:3,])
+
+tabla_con_totales_df <- as.data.frame.matrix(tabla_con_totales)
+tabla_con_totales_df <- t(tabla_con_totales_df[1:3,])
+
+
+par(bg="lightcyan")
+barplot(tabla_con_totales_df,beside=TRUE,col= c("aquamarine3","tan1"),ylim=c(0,650),ylab=" Frecuencias")
+#title("Tabla de frecuencias: Marital vs Deposit",cex=0.75)
+mtext("Tabla de frecuencias Marital vs Deposit",cex=1,line=1)
+legend("topright",cex=0.8,title="Deposit",c("No","Si"), fill=c("aquamarine3","tan1"),horiz=F, box.lty = 0)
+
+par(bg="lightcyan")
+barplot(tabla_porcentajes_df * 100,beside=TRUE,col= c("aquamarine3","tan1"),ylim=c(0,100),ylab="%")
+#title("Tabla de frecuencias %: Marital vs Deposit",cex=0.75)
+mtext("Tabla de frecuencias Marital vs Deposit %",cex=1,line=1)
+legend("topright",cex=0.8,title="Deposit",c("No","Si"), fill=c("aquamarine3","tan1"),horiz=F, box.lty = 0)
+
+```
+
+
+
+
+
+
+### 6.
+**Elija dos variables numericas, establezca rangos que representen distintos niveles de cada una y defina nuevas variables categóricas. Aplique un test adecuado para entender si existe asociación entre ambas. Utilice un nivel de significación del 5%.**
+
+Se eligen las variables Age y Balance y se las discretiza de la siguiente manera:  
+Age:  
+* < 30: Joven  
+* 30 < x < 60 Adulto  
+* > 60 Mayor  
+
+Balance:  
+* < 500  
+* 500 < x < 2500  
+* > 2500  
+
+```{r}
+#Discretizo la variable Age
+muestra$grupo_age <- cut(muestra$age, breaks = c(0, 30, 60, Inf), labels = c("joven", "adulto", "mayor"))
+
+#Discretizo la variable Balance
+muestra$grupo_balance <- cut(muestra$balance, breaks = c(-Inf, 500, 2500, Inf), labels = c("<500", "500 < x < 2500", " > mayor"))
+
+# Obtener la tabla de frecuencias
+Age_vs_balance <- table(muestra$grupo_age, muestra$grupo_balance)
+
+# Imprimir la tabla
+print(Age_vs_balance)
+```
+
+
+Test Chi-Cuadrdado de Independencia  
+Hipotesis  
+H0: Las variables son independientes  
+H1: Las variables no son independientes  
+```{r}
+# Establece las caracteristicas del estudio
+Xsq <- chisq.test(Age_vs_balance)
+
+Xsq$expected
+```
+
+
+```{r}
+Xsq
+```
+p-value = 4.99e-07 < 0,05 por lo que podemos rechazar la hipótesis nula y concluir en que las variables grupo_age y grupo_balance NO son independientes con un nivel de significación del 5%.
+
+
+
+
+
+### 7.
+**Seleccione la variable “education” y elija otra variable categórica. Aplique un test adecuado para entender si existe asociación entre ambas. Utilice un nivel de significación del 5%.**
+
+Como segunda variable categórica se elige a la variable Housing
+```{r}
+# Obtener la tabla de frecuencias
+education_vs_housing <- table(muestra$education, muestra$housing)
+
+# Imprimir la tabla
+print(education_vs_housing)
+```
+
+
+
+Test Chi-Cuadrdado de Independencia  
+Hipotesis  
+H0: Las variables son independientes  
+H1: Las variables no son independientes  
+```{r}
+# Establece las caracteristicas del estudio
+Xsq <- chisq.test(education_vs_housing)
+
+Xsq$expected
+```
+
+
+```{r}
+Xsq
+```
+
+p-value = 1.985e-09 < 0,05 por lo que podemos rechazar la hipótesis nula y concluir que las variables education y housing NO son independientes con un nivel de significación del 5%.
+
+
+
+
+
+### 8.
+**Seleccione otra variable continua y estime la diferencia de medias según el valor de la variable “deposit” con un nivel de confianza del 95%. Interprete el resultado obtenido.**
+
+
+
+Se selecciona la variable continua Duration
+```{r}
+#duration
+duration_vs_deposit <- aggregate(duration ~ deposit, data = muestra, FUN = mean)
+
+mask_no <- duration_vs_deposit$deposit == "no"
+mask_yes <- duration_vs_deposit$deposit == "yes"
+
+dif_means <- sum(duration_vs_deposit$duration[mask_yes]) - sum(duration_vs_deposit$duration[mask_no])
+
+dif_means
+```
+Diferencia entre las medias = 317,125
+
+
+Hipotesis para las varianzas poblacionales  
+H0: La división entre las varianzas de las poblaciones es igual a 1  
+H1: La división entre las varianzas de las poblaciones no es igual a 1  
+
+```{r}
+var.test(duration ~ deposit, data = muestra, 
+         alternative = "two.sided") # es una prueba bilateral
+```
+p-value = 2.2e-16 < 0,05 por lo que podemos rechazar la hipótesis nula y concluir que las varianzas de las poblaciones no son iguales con un nivel de significación del 5%. 
+ 
+ 
+Zonas de rechazo usando t de Student  
+Hipotesis sobre las medias  
+H0: La resta entre las varianzas de las poblaciones es igual a 0  
+H1: La resta entre las varianzas de las poblaciones no es igual a 0  
+```{r}
+t.test(duration ~ deposit, data = muestra, 
+       alternative = "two.sided", 
+       var.equal = F) #varianzas poblacionales iguales
+```
+Como el intervalo de confianza del test no incluye al 0 se puede afirmar que las medias de las poblaciones son difrentes con un nivel de significación del 5%.
+
+
+### 9.
+**Según el resultado obtenido en el punto 8.- realice un test de hipótesis apropiado para determinar la diferencia de medias de la variable en estudio. Trabaje con una significación del 5%. Presente el planteo de hipótesis adecuado, la resolución y la decisión a tomar..**
+
+
+Se verifica si la variable posee una distribución normal a través del Shapiro Test
+  
+Test de normalidad de Shapiro    
+H0: La variable sigue una distribución Normal   
+H1: La variable NO sigue una distribución normal    
+
+```{r}
+mask_no <- muestra$deposit == "no"
+mask_yes <- muestra$deposit == "yes"
+
+duration_yes <- muestra$duration[mask_yes]
+
+duration_no <- muestra$duration[mask_no]
+
+# Establece las caracteristicas del estudio
+shapiro.test(muestra$duration)
+
+#p-value = 2.2e-16 < 0,05 por ende Se rechaza la Hipotesis Nulo. La variable NO tiene
+# una distribución Normal
+```
+
+p-value = 2.2e-16  < 0,05 por ende se rechaza la Hipótesis Nula y se puede afirmar que la variable no tiene una distribución Normal con un nivel de significación del 5%.
+
+Se realiza también el test para la variable duration separada por la variable deposit
+
+```{r}
+shapiro.test(muestra$duration[muestra$deposit == "no"])
+
+shapiro.test(muestra$duration[muestra$deposit == "yes"])
+
+```
+
+p-value < 0,05 en ambos test por ende se rechaza la Hipótesis Nula y se puede afirmar que las variables no tienen una distribución Normal con un nivel de significación del 5%.
+
+Por lo tanto los resultados del punto 8 no son confiables ya que no se validan los supuestos del t de Student.
+
+Se procede entonces a realizar un test de independencia NO paramétrico como por ejemplo el test de Mann-Whitney-Wilcoxon para dos muestras independientes
+
+Test de Mann-Whitney-Wilcoxon  
+H0: Las dos muestras fueron extraídas de la misma población o de poblaciones idénticas. Las diferencias no son significativas.  
+H1: Las dos muestras no fueron extraídas de la misma población o de poblaciones idénticas. Las diferencias son significativas.  
+
+
+```{r}
+# Establece las caracteristicas del estudio
+wilcox.test(duration ~ deposit, data = muestra,
+            alternative = "two.sided")
+
+```
+
+p-value = 2.2e-16  < 0,05 por ende se rechaza la Hipótesis Nula y se puede afirmar que las dos muestras no fueron extraídas de la misma población o de poblaciones idénticas con un nivel de significación del 5%.
+
+
+
+
+
+### 10.
+**Seleccione una muestra de 30 elementos estratificada según la variable “deposit”. ¿Se puede afirmar que hay diferencias significativas en el balance de los que realizaron el depósito respecto a aquellos que no lo hicieron? Elija un test de hipótesis adecuado. Trabaje con una significación del 5%**
+
+Tomo una muestra de 30 elementos
+```{r}
+muestra_30 <- datos %>%
+  group_by(deposit) %>%
+  sample_n(15)
+```
+
+Debido a que la cantidad de datos es muy pequeña (<50) aplicamos nuevamente el test no parametrico de Mann-Whitney-Wilcoxon.
+
+Test de Mann-Whitney-Wilcoxon  
+H0: Las dos muestras fueron extraídas de la misma población o de poblaciones idénticas. Las diferencias no son significativas.  
+H1: Las dos muestras no fueron extraídas de la misma población o de poblaciones idénticas. Las diferencias son significativas.  
+
+```{r}
+mask_no <- muestra_30$deposit == "no"
+mask_yes <- muestra_30$deposit == "yes"
+
+duration_yes_30 <- muestra_30$duration[mask_yes]
+
+duration_no_30 <- muestra_30$duration[mask_no]
+
+# Establece las caracteristicas del estudio
+wilcox.test(duration_yes_30, 
+            duration_no_30,
+            alternative = "two.sided")
+
+#p-value = 0.001507 < 0,05 por ende las diferencias entre las muestras son significativas
+
+```
+
+p-value = 0.001507 < 0,05 por lo que se rechaza la Hipótesis Nula y se puede afirmar que las dos muestras no fueron extraídas de la misma población o de poblaciones idénticas y que por ende las direncias entre las muestras son significativas con un nivel de significación del 5%.
+
+
+
+
+
+### 11.
+**Decida si existen diferencias significativas en la duración respecto los niveles de educación (“secondary”, “tertiary”, “primary”, “unknown”). Justifique. Utilice un test adecuado. Realice las pruebas necesarias para comprobar los supuestos. Trabaje con una significación del 5%.**
+
+Para probar si las medias poblacionales de mas de dos poblaciones son iguales se puede aplicar el analisis de la varianza (ANOVA).  
+Test de ANOVA  
+H0: las k muestras provienen de la misma población o de poblaciones idénticas.  
+H1: algunas de las k muestras no provienen de la misma población o de poblaciones idénticas.  
+
+```{r}
+resultado_anova <- aov(duration ~ education, data = muestra)
+
+# Obtener los resultados del ANOVA
+resultado <- summary(resultado_anova)
+
+# Imprimir los resultados
+print(resultado)
+```
+
+Dicho test requiere que se cumplan 3 supuestos:  
+* Indepencia  
+* Normalidad  
+* Homocedasticidad  
+
+Se Verifica la normalidad de los residuos a través del test de Shapiro-Wilk  
+Test de normalidad de Shapiro  
+H0: La variable sigue una distribución Normal  
+H1: La variable NO sigue una distribución normal  
+```{r}
+# Comprobar los supuestos del ANOVA
+
+# Supuesto de normalidad
+residuos <- resid(resultado_anova)
+
+shapiro.test(residuos)  # Prueba de Shapiro-Wilk para la normalidad de los residuos
+```
+
+p-value = 2.2e-16  < 0,05 por ende se rechaza la Hipótesis Nula y se puede afirmar que los residuos ni siguen una distribución Normal con un nivel de significación del 5%.
+
+Se Verifica la homogeneidad de varianzas través del test de Levene  
+Prueba de Levene para la homogeneidad de varianzas  
+H0: Las varianzas son iguales  
+H1: Las varianzas no son iguales  
+```{r}
+# Supuesto de homogeneidad de varianzas
+muestra$education <- as.factor(muestra$education)
+leveneTest(duration ~ education, 
+           data=muestra)# Prueba de Levene para la homogeneidad de varianzas
+```
+p-value = 0.0415  < 0,05 por ende se rechaza la Hipótesis Nula y se puede afirmar que no hay homogeneidad en la variazna de los residuos con un nivel de significación del 5%.
+
+
+Como no se cumplen los supuestos para ANOVA se procede a realizar el Test de Kruskal-Wallis. Dicho test es una extensión de la prueba de rangos de Mann Whitney para más de dos poblaciones.
+
+Test de Kruskal-Wallis  
+H0: las k muestras provienen de la misma población o de poblaciones idénticas.  
+H1: algunas de las k muestras no provienen de la misma población o de poblaciones idénticas.  
+
+
+```{r}
+# Establece las caracteristicas del estudio
+kruskal.test(muestra$duration, muestra$education)
+```
+p-value = 0.9632 > 0,05 por ende no se rechaza la Hipótesis Nula y se puede considerar que las muestras provienen de la misma población o de poblaciones idénticas.
+
+
+
+
+
+### 12.
+**Elija dos variables cuantitativas, determine la variable explicativa y la variable explicada. Encuentre la ecuación de la recta de regresión lineal que explique la relación entre las variables elegidas. Escriba conclusiones acerca de la significatividad del modelo aplicado. Puede acompañar el modelo de un gráfico adecuado.**
+
+
+Para este analisis se elige a las variables Balance y Campaign, siendo balance la variable explicativa y Balance la variable explicada. 
+```{r}
+p<-ggplot(muestra, 
+          aes(x =balance , y = campaign)) + 
+  geom_point(aes(), colour ="deepskyblue", size=2)
+p + xlab("balance") +  ylab("campaign") 
+
+modelo<-lm(campaign ~ balance, 
+            data=muestra)
+
+summary(modelo)
+```
+
+
+Se calculan los residuos del modelo para chequear los supuestos.
+```{r}
+#Calculamos los residuos y los predichos
+e<-resid(modelo) # residuos
+re<-rstandard(modelo) #residuos estandarizados
+pre<-predict(modelo) #predichos
+res<-cbind(muestra$balance, muestra$campaign,pre,e,round(re,2))
+colnames(res)<-c("balance", "campaign", "Predichos", "Residuos", "residuos std") 
+head(res)
+
+```
+
+
+Evaluamos el supuesto de normalidad de manera gráfica y mediante una prueba de hipótesis.
+```{r}
+#Supuestos
+par(mfrow = c(1, 2))
+plot(pre, re, xlab="Predichos", ylab="Residuos estandarizados",main="Grafico de dispersion de RE vs PRED" )
+abline(0,0)
+qqPlot(e)
+```
+Del primer gráfico se desprende que no se cumple el supuesto de que la varianza de los residuos es constante y del segundo que no se cumple que los residuos tengan una distribución normal. 
+
+
+Test de normalidad de Shapiro  
+H0: Los residuos siguen una distribución Normal  
+H1: Los residuos NO sigue una distribución normal  
+
+```{r}
+shapiro.test(e)
+```
+p-value = 2.2e-16  < 0,05 por ende se rechaza la Hipótesis Nula y se puede afirmar que Los residuos no tienen una distribución Normal con un nivel de significación del 5%.
+
+
+
+```{r}
+confint(modelo)#por default es del 95%
+```
+
+
+
+```{r}
+p + geom_smooth(method = "lm", 
+                se = TRUE)#para mostrar la banda de confianza
+```
+
+
+```{r}
+summary(modelo)
+```
+La ecuación de la recta es:
+
+campaign = 2.624e+00 - 5.299e-05 x balance
+
+El p-Value de beta 1 es menor a 0,05 lo que indica que hay evidencia estadistica de la correlación entre dichas variables con un nivel de significación del 5%.
+
+Igualmente dicha ecuación no es confiable ya que no se cumplen los supuestos de la regresión lineal.
+
+
+
+
+
+### 13.
+**Presente un informe final con un mínimo de 500 y un máximo de 800 palabras del análisis de la base de datos, describiendo la base de datos, indicando la presencia de valores atípicos y las conclusiones a las que se abordó luego del análisis.**
+
+Descripción de data set:
+
+Los datos están relacionados con campañas de marketing de una entidad financiera. Las campañas de marketing se basaban en llamadas telefónicas. A menudo, más de un contacto con el mismo cliente fue necesario, para evaluar si el producto (depósito a plazo bancario) sería ('sí') o no ('no') suscrito.
+
+Información de atributos:     
+Variables de entrada:  
+1 - edad (numérico)  
+2 - trabajo: tipo de trabajo (categórico: 'administrativo', 'obrero', 'emprendedor', 'ama de casa', 'gerencia', 'jubilado', 'autónomo', 'servicios', 'estudiante', 'técnico', 'desempleado', 'desconocido')  
+3 - estado civil: estado civil (categórico: 'divorciado', 'casado', 'soltero', 'desconocido'; nota: 'divorciado' significa divorciado o viudo)  
+4 - educación (categórico: 'básico.4y', 'básico.6y', 'básico.9y', 'secundaria', 'analfabeto', 'curso profesional', 'licenciatura', 'desconocido')  
+5 - default: ¿tiene crédito en incumplimiento? (categórico: 'no', 'sí', 'desconocido')  
+6 - saldo  
+7 - vivienda: ¿tiene préstamo hipotecario? (categórico: 'no', 'sí', 'desconocido')  
+8 - préstamo: ¿tiene préstamo personal? (categórico: 'no', 'sí', 'desconocido')  
+
+
+relacionado con el último contacto de la campaña actual:  
+9 - contacto: tipo de comunicación de contacto (categórico: 'celular', 'teléfono')  
+10 - mes: último mes de contacto del año (categórico: 'ene', 'feb', 'mar', ..., 'nov', 'dic')  
+11 - día: último día de contacto de la semana (categórico: 'lun', 'mar', 'mié', 'jue', 'vie')  
+12 - duración: duración del último contacto, en segundos (numérico). Nota importante: este atributo afecta considerablemente el resultado deseado (por ejemplo, si la duración es 0, entonces y='no'). Sin embargo, la duración no se conoce antes de realizar una llamada. Además, al finalizar la llamada, y obviamente se conoce Por lo tanto, este dato solo debe incluirse con fines de referencia y debe descartarse si la intención es tener un modelo predictivo realista.  
+
+otros atributos:  
+13 - campaña: número de contactos realizados durante esta campaña y para este cliente (numérico, incluye el último contacto)  
+14 - pdays: número de días que han pasado desde el último contacto del cliente en una campaña anterior (numérico; 999 significa que el cliente no fue contactado previamente)  
+15 - anterior: número de contactos realizados antes de esta campaña y para este cliente (numérico)  
+16 - resultado_previo: resultado de la campaña de marketing anterior (categórico: 'fracaso', 'no_existente', 'éxito')  
+
+Variable de salida (objetivo deseado):  
+17 - depósito - ¿el cliente ha suscrito un depósito a plazo? (binario: 'sí', 'no')
+
+
+
+Teniendo en cuenta mi número de DNI (40.009.9997)  para establecer una seed (997) y tomando una muestra estratificada y balanceada en función de la variable target Deposit de 2000 elementos se obtiene el conjunto de datos “muestra”.
+
+Utilizando la función Summary obtenemos información general sobre cada una de las variables.
+
+```{r}
+muestra <- read.csv("muestra.csv",sep=',')
+summary(muestra)
+```
+
+Además de la información general del conjunto de datos "muestra" que hemos obtenido utilizando la función summary, también podemos explorar otras características interesantes. Por ejemplo, al verificar la presencia de valores faltantes en las variables, utilizamos la función colSums(is.na(muestra)) y observamos que ninguna de las features contiene valores faltantes. Esto es alentador, ya que nos asegura que no tenemos que preocuparnos por tratar con datos faltantes durante nuestro análisis.
+```{r}
+# Se verifica si hay valores faltantes en la muestra muestra
+colSums(is.na(muestra))
+```
+
+
+
+A continuación, nos adentramos en el análisis de la distribución de las variables en función de la variable objetivo "Deposit". Comenzamos examinando las variables numéricas presentes en el conjunto de datos.
+
+**Variables Numéricas:**
+
+*Histograma de Age vs Deposit*
+
+```{r, echo=FALSE}
+#Numeric features
+#Age and deposit
+
+# Set up the layout of subplots
+par(mfrow = c(1, 2))
+par(mar = c(5, 4, 4, 2))
+
+# Plot the histogram for deposit = "no" and age
+hist(muestra$age[muestra$deposit == "no"], breaks = 20,
+     col = "#D59701", edgecolor = "black",
+     main = "deposit = No", xlab = "Age", ylab = "Frequency")
+
+# Plot the histogram for deposit = "yes" and age
+hist(muestra$age[muestra$deposit == "yes"], breaks = 20,
+     col = "orange", edgecolor = "black",
+     main = "deposit = Yes", xlab = "Age", ylab = "Frequency")
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+Para la variable "Age", trazamos un histograma en relación a "Deposit". A partir del gráfico, podemos observar que hay una mayor probabilidad de que los clientes de edades comprendidas entre los 60 y 80 años realicen el depósito.
+
+
+*Boxplot Balance vs Deposit*
+
+```{r, echo=FALSE}
+#-------------------
+#Balance and deposit
+
+
+# Set up the layout of subplots
+par(mfrow = c(1, 2))
+par(mar = c(5, 4, 4, 2))
+
+# Plot the histogram for deposit = "no" and balance
+boxplot(muestra$balance[muestra$deposit == "no"], breaks = 20,
+     col = "#D59701", edgecolor = "black",
+     main = "deposit = No", xlab = "Balance", ylab = "Frequency")
+
+# Plot the histogram for deposit = "yes" and balance
+boxplot(muestra$balance[muestra$deposit == "yes"], breaks = 20,
+     col = "orange", edgecolor = "black",
+     main = "deposit = Yes", xlab = "Balance", ylab = "Frequency")
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+
+Luego, exploramos la relación entre la variable "Balance" y "Deposit" utilizando un boxplot. Calculamos las medias para ambos grupos: "Deposit = NO" con un valor de 1.276 y "Deposit = SI" con un valor de 1.912. Notamos que la media del balance es un 50% mayor en el grupo de clientes que realizaron el depósito en comparación con aquellos que no lo hicieron.
+
+
+*Boxplot Campaign vs Deposit*
+
+```{r, echo=FALSE}
+#Campaign and deposit
+
+
+# Numeric features: age, balance, duration, campaign, pdays, previous
+
+# Create a new plot with two subplots side by side
+par(mfrow = c(1, 2))
+
+# Subset the muestra based on deposit == "no"
+campaign_no <- muestra$campaign[muestra$deposit == "no"]
+
+# Plot histogram for deposit == "no"
+boxplot(campaign_no, main = "deposit = No", xlab = "campaign", col = "lightblue", border = "#D59701", breaks = 20)
+
+# Subset the muestra based on deposit == "yes"
+campaign_yes <- muestra$campaign[muestra$deposit == "yes"]
+
+# Plot histogram for deposit == "yes"
+boxplot(campaign_yes, main = "deposit = Yes", xlab = "campaign", col = "orange", border = "#D59701", breaks = 20)
+```
+
+
+
+*Boxplot Pdays vs Deposit*
+
+```{r, echo=FALSE}
+#-------------------
+#Previous and deposit
+
+# Set up the layout of subplots
+par(mfrow = c(1, 2))
+par(mar = c(5, 4, 4, 2))
+
+# Plot the histogram for deposit = "no" and previous
+boxplot(muestra$previous[muestra$deposit == "no"], breaks = 20,
+     col = "#D59701", edgecolor = "black",
+     main = "deposit = No", xlab = "Previous", ylab = "Frequency")
+
+# Plot the histogram for deposit = "yes" and previous
+boxplot(muestra$previous[muestra$deposit == "yes"], breaks = 20,
+     col = "orange", edgecolor = "black",
+     main = "deposit = Yes", xlab = "Previous", ylab = "Frequency")
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+
+*Histograma Pdays vs Deposit*
+
+```{r, echo=FALSE}
+#-------------------
+#Pdays and deposit
+
+# Set up the layout of subplots
+par(mfrow = c(1, 2))
+par(mar = c(5, 4, 4, 2))
+
+# Plot the histogram for deposit = "no" and pdays
+hist(muestra$pdays[muestra$deposit == "no"], breaks = 20,
+     col = "#D59701", edgecolor = "black",
+     main = "deposit = No", xlab = "pdays", ylab = "Frequency")
+
+# Plot the histogram for deposit = "yes" and pdays
+hist(muestra$pdays[muestra$deposit == "yes"], breaks = 20,
+     col = "orange", edgecolor = "black",
+     main = "deposit = Yes", xlab = "pdays", ylab = "Frequency")
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+
+Continuando nuestro análisis con los boxplots de las variables "Campaign", “ Previous” y "Pdays" en relación a "Deposit". También trazamos un histograma para la variable "Pdays" en función de "Deposit". Observamos que estas variables no proporcionan información significativa sobre la variable objetivo. 
+
+Por otra parte, las visualizaciones de boxplot nos permite observar la existencia de outleirs o valores atipicos en dichas distribuciones. (valores por fuera de los “bigotes” del boxplot).
+
+
+A continuación, nos enfocamos en las variables categóricas presentes en el conjunto de datos.
+
+**Variables Categoricas:**
+
+```{r, echo=FALSE}
+#Categorical Features
+
+# Set up the layout of subplots
+#par(mfrow = c(2, 2))
+#par(mar = c(5, 4, 4, 2))
+
+
+# Plot the count of marital status by deposit
+# Get unique categories of the "marital" feature
+marital_categories <- unique(muestra$marital)
+
+# Generate a color palette using the rainbow function
+colors <- rainbow(length(marital_categories))
+
+# Plot the count of marital status by deposit
+barplot(table(muestra$marital, muestra$deposit), beside = TRUE,
+        col = colors, main = "Marital Status",
+        xlab = "Marital Status", ylab = "Count")
+
+# Create the legend with matching colors and categories
+legend("top", legend = marital_categories, fill = colors,
+       bg = "white", box.lwd = 0.5, box.col = "black")
+
+
+# Education and deposit
+education_categories <- unique(muestra$education)
+colors_education <- rainbow(length(education_categories))
+
+barplot(table(muestra$education, muestra$deposit), beside = TRUE,
+        col = colors_education, main = "Education Level",
+        xlab = "Education Level", ylab = "Count")
+
+legend("top", legend = education_categories, fill = colors_education,
+       bg = "white", box.lwd = 0.5, box.col = "black")
+
+# Default and deposit
+default_categories <- unique(muestra$default)
+colors_default <- rainbow(length(default_categories))
+
+barplot(table(muestra$default, muestra$deposit), beside = TRUE,
+        col = colors_default, main = "Default Status",
+        xlab = "Default Status", ylab = "Count")
+
+legend("top", legend = default_categories, fill = colors_default,
+       bg = "white", box.lwd = 0.5, box.col = "black")
+
+
+
+# Job and deposit
+par(mar = c(5, 5, 5, 10), xpd=TRUE)
+job_categories <- unique(muestra$job)
+colors_default <- rainbow(length(job_categories))
+
+barplot(table(muestra$job, muestra$deposit), beside = TRUE,
+        col = colors_default, main = "job Status",
+        xlab = "job Status", ylab = "Count")
+
+legend("right", legend = job_categories, fill = colors_default,
+       bg = "white", box.lwd = 0.5, box.col = "black", inset=c(-0.45,0))
+
+
+# Reset the layout
+par(mfrow = c(1, 1))
+```
+
+
+ Al analizar su distribución en función de la variable objetivo "Deposit", podemos observar que no varían significativamente.
+ 
+ Además del análisis individual de las variables, también podemos explorar la correlación entre las variables numéricas utilizando un gráfico de estilo heatmap. 
+ 
+
+```{r, echo=FALSE}
+#Correlation Between The Features
+
+# Calculate the correlation matrix
+cor_matrix <- cor(muestra %>% select_if(is.numeric))
+
+# Plot the correlation heatmap
+heatmap(cor_matrix, 
+        Colv = NA, 
+        Rowv = NA, 
+        symm = TRUE, 
+        col = colorRampPalette(c("#D59701", "white", "orange"))(100),
+        main = "Correlation Heatmap",
+        margin = c(10, 10),
+        fontsize_row = 10,
+        fontsize_col = 10,
+        show_colnames = TRUE,
+        show_rownames = TRUE,
+        scale = "none",
+        notext = FALSE,
+        cexRow = 0.8,
+        cexCol = 0.8)
+
+# Add legend
+legend("right", 
+       legend = c("Low", "Medium", "High"),
+       fill = c("#D59701", "white", "orange"),
+       title = "Correlation",
+       cex = 0.8,
+       bg = "transparent")
+
+# Adjust the plot size
+dev.new(width = 10, height = 10)
+
+```
+
+El resultado muestra que no existe una relación lineal clara entre todas las variables. Sin embargo, esto no descarta la posibilidad de que exista una relación no lineal entre ellas. Para investigar más a fondo, se puede considerar analizar posibles relaciones cuadráticas u otras formas de relación entre las variables.
+
+
+
+En resumen, al realizar un análisis exploratorio del conjunto de datos "muestra" en función de la variable objetivo "Deposit", hemos encontrado algunas tendencias interesantes. Existe una mayor probabilidad de que los clientes de edades entre 60 y 80 años realicen el depósito. Además, el balance promedio es significativamente mayor para aquellos que realizaron el depósito en comparación con los que no lo hicieron. Sin embargo, no se observan diferencias significativas en la distribución de las variables categóricas en relación a "Deposit". Es importante tener en cuenta que este análisis exploratorio nos brinda una visión inicial de los datos y puede servir como base para un análisis más detallado y la construcción de modelos predictivos.
+

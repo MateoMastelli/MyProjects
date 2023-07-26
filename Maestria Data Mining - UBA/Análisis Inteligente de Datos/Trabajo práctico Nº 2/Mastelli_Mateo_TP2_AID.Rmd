@@ -1,0 +1,910 @@
+---
+title:  "<center> <h1>Análisis Inteligente de Datos\\
+
+Trabajo Práctico N° 2\\ 
+
+1° C 2023" 
+  
+author: "<left> <h2>Alumno: Mastelli Mateo"
+output: html_document
+header-includes:
+  - \renewcommand{\and}{\\}
+---
+
+```{r setup, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F)
+```
+
+```{r librerias, warning=F, message=F, warn.conflicts=FALSE}
+library(dplyr)
+library(readxl)
+library(psych)
+library(moments)
+library(ggplot2)
+require(readxl)
+library(stats)
+library(car)
+library(knitr)
+library(magrittr)
+
+library(tidyverse)
+library(ggrepel)
+library(gsheet)
+library(rgl)
+library(plot3D)
+library(GGally)
+library(reshape2)
+library(plotly)
+
+library(FactoMineR)
+library(factoextra)
+library(RColorBrewer)
+library(ggmosaic)
+library(DescTools)
+library(corrplot)
+library(gplots)
+library(FactoClass)
+library(rgl)
+library(logmult)
+library(anacor)
+library(vcdExtra)
+
+library(rsample)
+library(MVTests)
+library(mvShapiroTest)
+library(MVN)
+library(biotools)
+
+
+library(mlr)
+library(nortest)
+library(ggforce)
+library(devtools)
+library(geoR)
+library(mvnormtest)
+library(MASS)
+library(npmv)
+library(reshape)
+library(pracma)
+library(e1071)
+library(gridExtra)
+library(cowplot)
+library(ggpattern)
+library(ggpubr)
+library(scatterplot3d)
+library(dendextend)
+```
+
+
+### 1. 
+**Para la base de datos seleccionada genere una muestra aleatoria estratificada por “Sleep Disorder” de tamaño n = 300 utilizando como semilla los últimos tres dígitos del DNI/PASAPORTE. Para que la muestra sea proporcional, se sugiere seleccionar la muestra con los siguientes tamaños: “None”= 180; ”Sleep Apnea”= 60; “Insomnia”= 60. Guarde los datos en un archivo y realice todo el trabajo práctico con la muestra generada.**
+
+Se cargan los datos de la base de datos seleccionada en R
+```{r }
+datos <- read.csv("Sleep_health_and_lifestyle_dataset.csv",sep=',')
+```
+
+Mi DNI es 40.009.997 por ende se establece 997 como seed
+```{r}
+set.seed(997)
+```
+
+Se crea una muestra estratificada de n=300
+
+```{r}
+inso_sample <- datos %>% filter(Sleep.Disorder=="Insomnia")  %>% sample_n(60)
+none_sample <- datos %>% filter(Sleep.Disorder=="None")  %>% sample_n(180)
+apne_sample <- datos %>% filter(Sleep.Disorder=="Sleep Apnea")  %>% sample_n(60)
+
+muestra <- union(inso_sample, none_sample)
+muestra <- union(muestra, apne_sample)
+```
+
+
+Se verifica que la muestra esté balanceada por deposito
+```{r}
+muestra %>% group_by(Sleep.Disorder)  %>% count()
+```
+
+
+Reemplazo "." por "_" en el nombre de las columnas y Guarda internamente la muestra con extesión csv
+```{r}
+colnames(muestra) <- gsub("\\.", "_", colnames(muestra))
+write.csv(muestra, "muestra.csv", row.names=F)
+```
+
+
+
+### 2.
+**Considere la variable “Blood Pressure” y separe los datos dos variables: “cystolic pressure” y “diastolic pressure” .**
+
+
+```{r}
+muestra <- read.csv("muestra.csv",sep=',')
+
+#Genero dos nuevas columnas “cystolic pressure” y “diastolic pressure”
+muestra <- muestra %>%
+  separate(col = "Blood_Pressure", into = c("cystolic_pressure", "diastolic_pressure"), sep = "/") %>%
+  mutate(cystolic_pressure = as.integer(cystolic_pressure),
+         diastolic_pressure = as.integer(diastolic_pressure))
+
+#Elimino la variable "Person_ID" ya que no aporta info
+muestra <- subset(muestra, select = -Person_ID)
+```
+
+
+
+### 3.
+**Aplique el Análisis de Componentes Principales a la base de datos. Presente los resultados y gráficos que considere adecuados. Interprete los resultados.**
+
+Antes de realizar en analisis PCA se procede a hacer un pequeño EDA.
+
+```{r}
+str(muestra)
+```
+Analizamos la variables de texto.
+
+```{r}
+
+# Me quedo con las variables variables de texto
+char_variables <- c("Gender", "Occupation", "BMI_Category", "Sleep_Disorder")
+value_counts <- lapply(muestra[char_variables], table)
+
+# Imprimo los valores
+for (i in seq_along(value_counts)) {
+  cat("Variable:", char_variables[i], "\n")
+  print(value_counts[[i]])
+  cat("\n")
+}
+
+```
+Se considera que las categorias "Normal" y "Normal "Weight" son la misma, por lo tanto se procede a unificarlas baja el nombre "Normal"
+
+
+```{r}
+# Reemplazar "Normal Weight" con "Normal"
+muestra$BMI_Category <- ifelse(muestra$BMI_Category == "Normal Weight", "Normal", muestra$BMI_Category)
+```
+
+
+Variables numericas
+
+```{r}
+df_numericas <- muestra %>%
+  select_if(is.numeric)
+```
+
+Analizamos como es la distribución de las variables individualmente
+
+```{r}
+data_long <- melt(muestra)  
+ggplot(data_long, aes(x=variable, y=value)) + 
+    geom_boxplot() +
+    facet_wrap(~variable, scale="free")
+```
+
+
+
+Del ploteo de los boxplots se interpreta que la unica variable que posee outliers es "hear_Rate"
+
+Para un mejora analisis, realizamos el mismo ploteo pero agrupando por la variable "Sleep_rate"
+
+```{r}
+ggplot(data_long, aes(x=variable, y=value, fill= Sleep_Disorder)) + 
+    geom_boxplot() +
+    facet_wrap(~variable, scale="free")
+```
+De esta manera se observa la presencia de outliers en casi todas las variables para alguno de los grupos.
+
+Analizamos como se relacionan todas nuestras variables de a pares
+
+```{r, echo=FALSE}
+gpairs_lower <- function(g){
+  g$plots <- g$plots[-(1:g$nrow)]
+  g$yAxisLabels <- g$yAxisLabels[-1]
+  g$nrow <- g$nrow -1
+
+  g$plots <- g$plots[-(seq(g$ncol, length(g$plots), by = g$ncol))]
+  g$xAxisLabels <- g$xAxisLabels[-g$ncol]
+  g$ncol <- g$ncol - 1
+
+  g
+}
+
+
+g <-ggpairs(df_numericas, 
+            aes(color = muestra$Sleep_Disorder, alpha = 0.5),
+            lower = list(continuous = "points", combo = "dot"), 
+            upper  = list(continuous = "blank"), legend = 1)+ theme(legend.position = "bottom")
+
+gpairs_lower(g)
+```
+
+
+
+```{r, echo=FALSE}
+#Matriz de correlación
+library(corrplot)
+{}
+m_cor <- cor(df_numericas) 
+
+# representa la matriz de correlaciones mediante círculos
+corrplot(m_cor,
+         method="circle",
+         type = "upper",
+         diag= FALSE) 
+```
+
+
+Se puede apreciar la alta correlación que hay entre las varaibles:
+
+"Sleep_Duration" vs "Quality_of_Sleep"
+"Sleep_Duration" vs "Strees_Level"
+"Quality_of_Sleep" vs  "Strees_Level"
+"Physical_Activity_Level" vs "Daily_steps"
+"cystolic_pressure" vs "diastolic_pressure"
+
+
+Ahora si, se realiza el Analisis de Componentes Principales (PCA)
+
+```{r}
+pca <- prcomp(df_numericas,
+              scale = TRUE)# con datos estandarizados
+names(pca)
+```
+Componentes y sus pesos
+
+```{r}
+round(pca$rotation,2)
+```
+Se observa que la componente que mas información guarda sobre el data set esta compuesta de la siguiente manera
+
+$\ PC1= - 0.18*Age - 0.46*Sleep_Duration - 0.49*Quality_of_Sleep - 0.06*Physical_Activity_Level + 0.49*Stress_Level + 0.19*cystolic_pressure + 0.19*diastolic_pressure + 0.43*Heart_Rate - 0.12*Daily_Steps$
+
+
+Pesos
+
+```{r, echo=FALSE}
+#loadings
+
+carga1 = data.frame(cbind(X=1:length(df_numericas),
+                          primeracarga=data.frame(pca$rotation)[,1]))
+carga2 = data.frame(cbind(X=1:length(df_numericas),
+                          segundacarga=data.frame(pca$rotation)[,2]))
+cbind(carga1,carga2)
+```
+
+```{r echo=TRUE, echo=FALSE}
+ggplot(carga1, aes(colnames(df_numericas) ,primeracarga)) + 
+       geom_bar (stat="identity" , 
+       position="dodge" ,
+       fill ="royalblue" ,
+       width =0.5 ) + xlab( 'Variables' ) + ylab('Primera carga' )
+
+```
+
+
+Las variables que mas peso tienen dentro de la primer componente y por ende las que mas variabilidad tienen, son "Quality_of_Sleep","Sleep_Duration",  "Stress_Level",  y "Heart_Rate"
+
+
+Analizamos que  proporción de la variabilidad total es explicada por las componentes
+
+
+```{r}
+prop_varianza <- pca$sdev^2 / sum(pca$sdev^2)
+prop_varianza
+```
+
+```{r}
+ggplot(data = data.frame(prop_varianza, pc = 1:9),
+       aes(x = pc, y = prop_varianza)) +
+  geom_col(width = 0.2) +
+  scale_y_continuous(limits = c(0,0.4)) +
+  theme_bw() +
+  labs(x = "Componente principal",
+       y = "Prop. de varianza explicada")
+```
+```{r}
+ggplot(data = data.frame(prop_varianza, pc = 1:9),
+       aes(x = pc, y = prop_varianza, group = 1)) +
+  geom_point() +
+  geom_line() +
+  theme_bw() +
+  labs(x = "Componente principal",
+       y = "Prop. varianza explicada acumulada")
+```
+
+
+De los graficos se observa que las primeras 5 componentes acumalan mas del 95% de la varianza del data Set. Si bien generalmente lo ideal es quedarse con las primer 2 o 3 componetes en este caso se estaria dejando mucha informacion afuera.
+
+
+
+### 4.
+**Elija dos variables y aplique Análisis de Correspondencias Simple. Interprete los resultados.**
+
+Se elijen las variables "BMI_Category" y "Sleep_Disorder" para realizar un Análisis de Correspondencia simple.
+
+El análisis de correspondencias es una técnica descriptiva/exploratoria diseñada para analizar correspondencias entre datos categóricos nominales, y permite la exploración de su estructura subyacente.
+
+El objetivo del análisis de correspondencias es la representación de las entradas de la tabla de frecuencias relativas en términos de distancias euclídeas entre filas y columnas individuales, en un espacio de baja dimensión (escalado multidimensional). Estas distancias euclídeas representan las distancias chi cuadrado de las proporciones de la tabla de frecuencias. 
+
+
+```{r}
+# Obtener la tabla de frecuencias
+BMI_vs_SD <- table(muestra$BMI_Category, muestra$Sleep_Disorder)
+BMI_vs_SD
+```
+Test de independencia Chi cuadrado
+```{r test, echo=TRUE}
+# Test de independencia Chi-cuadrado
+chisq.test(BMI_vs_SD)
+```
+A pripori, el valor tan bajo de p-valor obtenido en el Test es un fuerte indicativo de que las variables NO son independientes.
+
+
+```{r theme, echo=FALSE}
+## Estilo general para los gráficos
+theme <- theme(text = element_text(size=10),
+               plot.title = element_text(size = 12, face = "bold.italic", hjust = 0.5), 
+               axis.title.x = element_text(size = 10, face="bold", colour='black'),         
+               axis.title.y = element_text(size = 10, face="bold"),
+               panel.border = element_blank(),
+               panel.grid.major = element_blank(),
+               panel.grid.minor = element_blank(), 
+               legend.title = element_text(face="bold"))
+```
+
+
+
+Gráfico de mosaico
+```{r mosaico, echo=TRUE, warning=F, echo=FALSE}
+
+df_base <- as.data.frame.matrix(BMI_vs_SD)
+df_base$BMI_Category <- rownames(df_base)
+df_base <- df_base %>% pivot_longer(!BMI_Category, names_to = "Variable", values_to = "valor")
+df_base <- as.data.frame(lapply(df_base, rep, df_base$valor))
+df_base$BMI_Category <- factor(df_base$BMI_Category, levels= c('Normal','Obese', 'Overweight'))
+
+ggplot(data=df_base) +
+  geom_mosaic(aes(x = product(BMI_Category, Variable), 
+                  fill = Variable, alpha=BMI_Category)) + theme +
+  labs(title = 'Distribución categoría BMI_Category vs Sleep_Disorder',
+              y = 'BMI_Category', x = 'Sleep_Disorder') +
+  scale_fill_viridis_d() +
+  theme(legend.position = 'none')
+
+```
+
+
+
+### Análisis de perfiles
+Perfiles Fila
+```{r perfiles fila, echo=TRUE, warning=F}
+BMI_vs_SD_fila <-  round(prop.table(BMI_vs_SD,1),3)
+BMI_vs_SD_fila
+```
+
+```{r,include=FALSE}
+ggplot(data= df_base, aes(x = BMI_Category, fill= Variable))+geom_bar(position='fill', alpha=0.9)+theme+
+  labs(title = 'Distribución categoría BMI_Category vs Sleep_Disorder',
+              y = 'BMI_Category', x = 'Sleep_Disorder') +
+  scale_fill_viridis_d(name='BMI_Category') 
+
+BMI_vs_SD_fila <- as.data.frame.matrix(BMI_vs_SD_fila)
+BMI_vs_SD_fila$BMI_Category <- rownames(BMI_vs_SD_fila)
+BMI_vs_SD_fila <- BMI_vs_SD_fila %>% pivot_longer(!BMI_Category, names_to = "Variable", values_to = "valor")
+
+ggplot(data=BMI_vs_SD_fila, aes(y = valor, x= BMI_Category, color=Variable))+geom_line(aes(group = Variable))+theme+
+  labs(title = 'Distribución categoría BMI_Category vs Sleep_Disorder',
+              y = 'Frecuencia', x = 'BMI_Category') +
+  scale_color_viridis_d(name='Sleep_Disorder') 
+```
+
+
+
+Perfiles Columna
+```{r perfiles columna, echo=TRUE, warning=F}
+# Perfiles columna 
+bd_col <- round(prop.table(BMI_vs_SD,2),3)
+bd_col
+```
+
+```{r,include=FALSE}
+ggplot(data=df_base, aes(x = Variable, fill= BMI_Category))+geom_bar(position='fill', alpha=0.9)+theme+
+  labs(title = 'Distribución categoría BMI_Category vs Sleep_Disorder',
+              y = 'Frecuencia', x = 'Sleep_Disorder') +
+  scale_color_viridis_d(name='BMI_Category') 
+
+
+bd_col <- as.data.frame.matrix(bd_col)
+bd_col$BMI_Category <- rownames(bd_col)
+bd_col <- bd_col %>% pivot_longer(!BMI_Category, names_to = "Variable", values_to = "valor")
+
+ggplot(data=bd_col, aes(y = valor, x= Variable, color=BMI_Category))+geom_line(aes(group = BMI_Category))+theme+
+  labs(title = 'Distribución categoría BMI_Category vs Sleep_Disorder',
+              y = 'Frecuencia', x = 'Sleep_Disorder') +
+  scale_color_viridis_d(name='BMI_Category') 
+```
+
+
+
+Lo que se esperaria ver en estos analisis si las variables en cuestión fuesen independientes es que las proporciones en las que estan distribuidas cada subcategoria de una variable, permanezca medianamente constante independietnemente de que valor tome la otra variable.
+
+En el grafico de mosica de los perfiles columnas se puede ver que estas propociones se asemejan para las subcagorias "Insomia" y "Sleep Apnea" pero diferen considerablemente de la subcateogria "None".
+Sumado a esto, en los garficos de rectas, el hecho de que estas se corten, es un indicio de la NO independencia entre las variables.
+
+
+Finalmente de Procede a Realizar el Analisis de correspondencia simple
+
+### Análisis de correspondencia simple
+```{r ACS,echo=TRUE}
+BMI_Category.ac = CA(BMI_vs_SD,graph=FALSE) # Realiza el analisis de correspondencias
+get_ca_row(BMI_Category.ac) # Muestra lo que se guarda de las filas
+get_ca_col(BMI_Category.ac) # Muestra lo que se guarda de las columnas
+```
+
+Contribución de filas y columnas
+```{r ACS1,echo=TRUE, echo=FALSE}
+# Contribución de filas y columnas al eje 1
+fviz_contrib(BMI_Category.ac,choice="row",axes=1, fill="royalblue",color ="black")+ theme(axis.text.x = element_text(angle=0)) + theme + labs(title = 'Contribución de filas',  x = 'BMI_Category', y = 'Contribución (%)')+theme(panel.background = element_rect(fill = "grey95"))
+
+fviz_contrib(BMI_Category.ac,choice="col",axes=1, fill="royalblue",color ="black")+
+ theme(axis.text.x = element_text(angle=0)) + theme + labs(title = 'Contribución de columnas',  x = 'Sleep_Disorder', y = 'Contribución (%)')+theme(panel.background = element_rect(fill = "grey95"))
+```
+
+### Biplot simétrico
+
+```{r BiPlot,echo=TRUE, warning=FALSE, message=FALSE, echo=FALSE}
+fviz_ca_biplot( BMI_Category.ac , repel  =TRUE, col.row="royalblue",col.col="indianred") + labs(title='Biplot Análisis de correspondencias Simple')+
+theme+theme(panel.background = element_rect(fill = "grey95"))
+
+#fviz_ca_biplot( BMI_Category.ac , repel  =TRUE, col.row="blue",col.col="cos2",gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07")) + labs(title='Biplot Análisis de correspondencias Simple\ncalidad de representación (cos2)')+
+#theme+theme(panel.background = element_rect(fill = "grey95"))
+```
+
+Del Biplot se desprende que las subcagorias "normal" y "None" están altamente correlacionadas y que la categoria "Overweight" guarda realción con las categorias "Insomia" y "sleep Apnea".
+
+En base a todo lo previamente expuesto podemos concluir que las variables "BMI_Category" y "Sleep_Disorder" NO son independientes entre si.
+
+
+### 5.
+**Elija tres variables y aplique Análisis de Correspondencias Múltiples. Interprete los resultados.**
+
+Incluyo al analisis la variable "Gender".
+
+```{r}
+library(dplyr)
+# Obtener la tabla de frecuencias
+#BMI_vs_SD_vs_GE <- muestra %>% select(c("BMI_Category", "Sleep_Disorder", "Gender"))
+BMI_vs_SD_vs_GE <- subset(muestra, select = c(BMI_Category, Sleep_Disorder, Gender))
+```
+
+
+### Aplico MCA
+```{r data3 mca}
+# MCA 
+BMI_vs_SD_vs_GE_mca <- MCA(BMI_vs_SD_vs_GE, graph = FALSE) #quanti.sup, quali.sup son parámetros que se le pueden dar a la función
+# representan vectores de variables categóricas o numéricas suplementarias
+
+# Resumen MCA
+summary(BMI_vs_SD_vs_GE_mca , ncp=2) # sólo veo las 2 primeras dimensiones (ncp)
+
+
+dimdesc(BMI_vs_SD_vs_GE_mca)
+```
+
+### Gráficos MCA 
+
+#### Screeplot 
+```{r data3 mca graficos1, echo=FALSE}
+# scree plot
+fviz_screeplot(BMI_vs_SD_vs_GE_mca, addlabels = TRUE)+theme
+```
+
+
+#### Biplot 
+```{r data3 mca graficos2, warning=F,include=FALSE}
+# Biplot de variables y rows
+colores <- as.character(c(1,1,1,2,2,2,3,3))
+fviz_mca_biplot(BMI_vs_SD_vs_GE_mca, col.var=colores, repel = TRUE, ggtheme = theme, col.ind='gray90',invisible="quali")+theme(legend.position='none')
+```
+
+
+Del Biplot para el MCA incluyendo la variable "Gender" se desprende que los hombres tienen una mayor vinculación con tener un peso normal y no poseer problemas del sueño.
+
+
+
+### 6.
+**Realice el Análisis Discriminante para clasificar los pacientes según la variable trastorno de sueño. Interprete los resultados.**
+
+
+
+```{r}
+df_split <- initial_split(muestra,
+                          prop = 0.85,
+                          strata = Sleep_Disorder)#para conservar la proporción de las clases
+
+df_train <- df_split %>%
+              training()
+
+df_test <- df_split %>%
+              testing()
+
+# Número de datos en test y train
+paste0("Total del dataset de entrenamiento: ", nrow(df_train))
+
+paste0("Total del dataset de testeo: ", nrow(df_test))
+```
+
+Creamos tres subsets de datos para cada "Sleep_disorder"
+
+```{r}
+library(dplyr)
+
+# Subset for "Insomnia" Sleep_Disorder
+Insomnia <- subset(df_train[, 1:12], df_train$Sleep_Disorder == "Insomnia")
+Insomnia_numericas <- Insomnia %>%
+  select_if(is.numeric)
+
+# Subset for "None" Sleep_Disorder
+None <- subset(df_train[, 1:12], df_train$Sleep_Disorder == "None")
+None_numericas <- None %>%
+  select_if(is.numeric)
+
+# Subset for "Sleep Apnea" Sleep_Disorder
+Sleep_Apnea <- subset(df_train[, 1:12], df_train$Sleep_Disorder == "Sleep Apnea")
+Sleep_Apnea_numericas <- Sleep_Apnea %>%
+  select_if(is.numeric)
+```
+
+
+El Análisis Discriminante cuenta con los siguientes supuestos:
+
+1- Normalidad multivariada
+
+2- Independencia de las observaciones
+
+3- Homocedasticidad.
+
+
+Verefiquemos supuestos
+
+1- Normalidad multivariada
+
+H0 = Variable normal
+
+```{r}
+shapiro.test(as.matrix(Insomnia_numericas))
+
+shapiro.test(as.matrix(None_numericas))
+
+shapiro.test(as.matrix(Sleep_Apnea_numericas))
+```
+Se rechaza H0 por lo que no se cumple la hipotesis de Normalidad.
+
+
+2- Independencia de las observaciones
+
+Se asume que viene dada por el diseño
+
+
+3- Homocedasticidad
+
+Ho las matrices de varianzas-covarianzas de los grupos son iguales.
+
+Analizamos igualdad de matrices de varianzas y covarianzas:
+
+     
+```{r}
+library(biotools)
+
+df_train_numeric_columns <- df_train %>%
+  select_if(is.numeric)
+
+df_train_numeric_columns$Sleep_Disorder <- df_train$Sleep_Disorder 
+
+boxM(df_train_numeric_columns[,-10],
+     df_train_numeric_columns[,10])# las patologias
+
+```     
+Por lo tanto, no se cumple con todos los supuestos. Igualmente, se prosigue como si se hubiesen cumplido pero teniendo en cuenta que los resuletados del LDA no van a ser confiables.
+     
+##LDA
+```{r}
+model_lda <- lda(Sleep_Disorder~., data =df_train_numeric_columns)
+model_lda
+``` 
+LD1 explica el 73.75% de la proporción de varianza entre clases.
+
+La 2da función discriminante es independiente de la primera (ortogonal) y es la que mejor separa los grupos usando la variación remanente o residual, después que la 1ra función discriminante ha sido determinada
+
+```{r}
+lda.data <- cbind(df_train_numeric_columns, predict(model_lda)$x)
+ggplot(lda.data, aes(LD1, LD2)) +
+  geom_point(aes(color = Sleep_Disorder))
+```
+
+Se puede observar que con una recta LD1 aprox 0 se puede separar correctamente la mayoria de los datos de categoria "None".
+
+
+
+Se procede a realizar las predicciones
+
+```{r}
+df_test_numeric_columns <- df_test %>%
+  select_if(is.numeric)
+
+df_test_numeric_columns$Sleep_Disorder <- df_test$Sleep_Disorder 
+
+predictions <- model_lda |>  
+                predict(df_test_numeric_columns)
+predictions
+```
+
+Matriz de confusion para el set de entrenamentio 
+
+```{r}
+confusion_matrix_train_LDA <- table(predict(model_lda,type="class")$class,df_train_numeric_columns$Sleep_Disorder)
+confusion_matrix_train_LDA 
+```
+
+```{r}
+# Calculate accuracy
+accuracy_LDA <- sum(diag(confusion_matrix_train_LDA )) / sum(confusion_matrix_train_LDA)
+print(paste("Accuracy: ", accuracy_LDA))
+cat("\n")
+```
+
+Matriz de confusion para el set de testeo
+
+```{r}
+lda.test <- predict(model_lda,df_test_numeric_columns)
+df_test_numeric_columns$lda <- lda.test$class
+confusion_matrix_test_LDA <- table(df_test_numeric_columns$lda,df_test_numeric_columns$Sleep_Disorder)
+confusion_matrix_test_LDA 
+```
+
+
+```{r}
+print("Metricas para evalucar la performance de LDA en testeo")
+cat("\n")
+cat("\n")
+
+# Calculate accuracy
+accuracy_LDA <- sum(diag(confusion_matrix_test_LDA)) / sum(confusion_matrix_test_LDA)
+
+
+# Calculate precision for each class
+precision_insomnia_LDA <- confusion_matrix_test_LDA["Insomnia", "Insomnia"] /
+                      sum(confusion_matrix_test_LDA["Insomnia", ])
+precision_none_LDA <- confusion_matrix_test_LDA["None", "None"] /
+                  sum(confusion_matrix_test_LDA["None", ])
+precision_apnea_LDA <- confusion_matrix_test_LDA["Sleep Apnea", "Sleep Apnea"] /
+                   sum(confusion_matrix_test_LDA["Sleep Apnea", ])
+
+
+# Calculate recall for each class
+recall_insomnia_LDA <- confusion_matrix_test_LDA["Insomnia", "Insomnia"] /
+                   sum(confusion_matrix_test_LDA[, "Insomnia"])
+recall_none_LDA <- confusion_matrix_test_LDA["None", "None"] /
+               sum(confusion_matrix_test_LDA[, "None"])
+recall_apnea_LDA <- confusion_matrix_test_LDA["Sleep Apnea", "Sleep Apnea"] /
+                sum(confusion_matrix_test_LDA[, "Sleep Apnea"])
+
+
+# Calculate F1-score for each class
+f1_insomnia_LDA <- 2 * (precision_insomnia_LDA * recall_insomnia_LDA) /
+               (precision_insomnia_LDA + recall_insomnia_LDA)
+f1_none_LDA <- 2 * (precision_none_LDA * recall_none_LDA) /
+           (precision_none_LDA + recall_none_LDA)
+f1_apnea_LDA <- 2 * (precision_apnea_LDA * recall_apnea_LDA) /
+            (precision_apnea_LDA + recall_apnea_LDA)
+
+
+print(paste("Accuracy: ", accuracy_LDA))
+cat("\n")
+print("Pecision para cada clase")
+print(paste("Precision Insomia: ", precision_insomnia_LDA))
+print(paste("Precision None: ", precision_none_LDA))
+print(paste("Precision Apnea: ", precision_apnea_LDA))
+cat("\n")
+print("Recall para cada clase")
+print(paste("Recall Insomia: ", recall_insomnia_LDA))
+print(paste("Recall None: ", recall_none_LDA))
+print(paste("Recall Apnea: ", recall_apnea_LDA))
+cat("\n")
+print("F1-score para cada clase")
+print(paste("F1-score Insomia: ", f1_insomnia_LDA))
+print(paste("F1-score None: ", f1_none_LDA))
+print(paste("F1-score Apnea: ", f1_apnea_LDA))
+```
+
+Accuracy en train: 0.8862
+Accuracy en test: 0.8444
+
+Se puede observar que el modelo tiene una buena capidad de generalizacion comparandolo con la metrica del accuracy.
+Por otro lado, analizando el resto de las metricas calculadas para el set de testeo se puede obsrevar que la clase a la que mas le cuesta clasificar correctamente al modelo es a la de Insomia. 
+
+
+
+### 7.
+**Aplique el algoritmo SVM al conjunto de datos. Interprete los resultados.**
+
+
+SVM
+```{r}
+#Escalo los datos
+df_train_escalado <- df_train_numeric_columns[-10]
+
+df_test_escalado <- df_test %>%
+  select_if(is.numeric)
+
+#Escalo los datos en test
+for (k in 1:9){df_test_escalado[,k]=(df_test_escalado[,k]-mean(df_train_escalado[,k]))/sd(df_train_escalado[,k])}
+
+#Escalo los datos en train
+for (k in 1:9){df_train_escalado[,k]=(df_train_escalado[,k]-mean(df_train_escalado[,k]))/sd(df_train_escalado[,k])}
+
+#Agrego la columna target
+df_train_escalado$Sleep_Disorder <- df_train$Sleep_Disorder
+
+df_test_escalado$Sleep_Disorder <- df_test$Sleep_Disorder
+```
+
+
+```{r}
+# Defino modelo SVM
+
+task = makeClassifTask(data = df_train_escalado, target = "Sleep_Disorder") 
+lrn_svm1 = makeLearner("classif.svm", predict.type = "prob", par.vals = list( kernel = "linear", cost=2)) 
+mod_svm1 = mlr::train(lrn_svm1, task)
+
+# Predicción TRAIN (naive)
+pred_svm_1 = predict(mod_svm1, newdata = df_train_escalado) # por si quiero ver naive sobre training
+acc_svm_1_train <- round(measureACC(as.data.frame(pred_svm_1)$truth, as.data.frame(pred_svm_1)$response),4)
+
+print(paste("Accuracy en train: ", acc_svm_1_train))
+cat("\n")
+
+
+# Predicción TEST
+pred_svm1 = predict(mod_svm1, newdata = df_test_escalado)
+acc_svm1_test <- round(measureACC(as.data.frame(pred_svm1)$truth, as.data.frame(pred_svm1)$response),4)
+print(paste("Accuracy en test: ", acc_svm1_test))
+```
+
+Accuracy en train: 0.9176
+Accuracy en test: 0.8667
+
+Se puede notar una mejora en las metricas de accuracy  tanto en train y en test respecto de los valor obtenidos con el modelo de LDA
+
+
+
+### 8.
+**Aplique a los datos un método de clasificación no jerárquico. Interprete los resultados.**
+
+K-means:
+Selección de número óptimo de clusters
+
+Método de Elbow
+```{r}
+
+df_escalado <- rbind(df_train_escalado[, -10], df_test_escalado[, -10])
+
+
+fviz_nbclust(x = df_escalado, FUNcluster = kmeans, method = "wss", 
+             diss = dist(df_escalado , method = "euclidean")) + 
+  geom_vline(xintercept = 7, linetype = 2)
+```
+Numero optimo de cluster: 7 
+
+
+```{r}
+km_clusters <- kmeans(x = df_escalado, centers = 7, nstart = 25)
+names(km_clusters)
+```
+
+
+```{r}
+split(rownames(df_escalado),km_clusters$cluster)
+```
+
+
+Representación gráfica de la segmentación en dos dimensiones
+
+```{r}
+fviz_cluster(object = km_clusters, data = df_escalado, show.clust.cent = TRUE, ellipse.type = "euclid", star.plot = TRUE, repel = TRUE) + 
+  theme_bw() + 
+  theme(legend.position = "none")
+```
+
+La informacion parece poder discretizarse de forma natural en 7 grupos difretes.
+
+
+
+### 9.
+**Aplique a los datos el método de clasificación jerárquico KNN. Interprete los resultados.**
+
+
+
+```{r}
+task2 = makeClassifTask(data = df_train_escalado, target = "Sleep_Disorder") 
+# Cambio los k 
+acc=NULL
+acc2=NULL
+ks = seq(1,20,1)
+for (i in 1:length(ks)) {
+        lrn_knn = makeLearner("classif.knn", predict.type = "response",par.vals = list("k" = i)) 
+        mod_knn = mlr::train(lrn_knn, task2)
+        pred_knn= predict(mod_knn, newdata = df_test_escalado)
+        acc[i] = measureACC(as.data.frame(pred_knn)$truth, as.data.frame(pred_knn)$response)
+        pred_knn_ = predict(mod_knn, newdata = df_train_escalado) # por si quiero ver naive sobre training
+        acc2[i] = measureACC(as.data.frame(pred_knn_)$truth, as.data.frame(pred_knn_)$response)
+        
+}
+        
+par(mfcol = c(1,2))
+
+new_df1 <- as.data.frame(cbind(ks,acc))
+new_df1 <- new_df1%>%mutate(sub_data='test')
+new_df2 <- as.data.frame(cbind(ks,acc2))
+colnames(new_df2) <- c('ks','acc')
+new_df2 <- new_df2%>%mutate(sub_data='train')
+
+new_df <- as.data.frame(rbind(new_df1,new_df2))
+
+#new_df1[which.max(new_df1$acc),"threshold"] 
+#new_df2[which.max(new_df2$acc),"threshold"] 
+# ···························································································
+# Gráfico de cómo varía la métrica de performance accuracy, de acuerdo al umbral elegido
+ggplot(new_df, aes(x=ks, y=acc)) + geom_line(aes(color = sub_data,linetype=sub_data))+labs(x='Umbral', y='Métrica de performance (accuracy)', 
+                     title= 'Evaluación del modelo de KNN') +
+        scale_color_manual(values = c("red", "darkred"),labels=c('prueba','entrenamiento')) +
+        scale_linetype_manual(values=c(1,2), labels=c('prueba','entrenamiento')) + 
+        labs(color='Conjunto de\n evaluación',linetype='Conjunto de\n evaluación')
+```
+Del grafico se desprende que el numero optimo de vecinos a elegir es 3 ya que es el valor para el cual se obtiene el mayor accuracy en test.
+
+
+```{r}
+task2 = makeClassifTask(data = df_train_escalado, target = "Sleep_Disorder") 
+lrn_knn = makeLearner("classif.knn", predict.type = "response",par.vals = list("k" = 3)) 
+mod_knn = mlr::train(lrn_knn, task)
+# Predicción TEST
+pred_knn= predict(mod_knn, newdata = df_test_escalado)
+acc_knn_test <- round(measureACC(as.data.frame(pred_knn)$truth, as.data.frame(pred_knn)$response),4)
+print(paste("Accuracy en test: ", acc_knn_test))
+cat("\n")
+# ···························································································
+# Predicción TRAIN (naive)
+pred_knn_train = predict(mod_knn, newdata = df_train_escalado) # por si quiero ver naive sobre training
+acc_knn_train <- round(measureACC(as.data.frame(pred_knn_)$truth, as.data.frame(pred_knn_)$response),4)
+print(paste("Accuracy en train: ", acc_knn_train))
+cat("\n")
+```
+Se observa que el modelo tiene una muy buena capacidad de generalizacion ya que el accuracy en train y en test dan muy similar.
+
+Resumiendo las metricas de los modelos vemos lo siguente:
+
+*LDA*
+Accuracy en train: 0.8862
+Accuracy en test: 0.8444
+
+
+*SVM*
+Accuracy en train: 0.9176
+Accuracy en test: 0.8667
+
+
+*KNN*
+Accuracy en train: 0.8706
+Accuracy en test: 0.8667
+
+
+
+Basandonos en el score Acurracy podemos decir que entre los modelos analizados los mas optimos para realizar predicciones son SVM y KNN con un score de Acuraccy en test de 0.8667. 
+
+
+### 10.
+**Presente un informe final de 2 carillas como máximo, no incluya gráficos, explicando las conclusiones del trabajo realizado, mencione si es necesario validar supuestos requeridos para aplicar el método. Compare los resultados de los métodos supervisados y establezca conclusiones. Por otro lado, compare los métodos no supervisados y presente sus conclusiones.**
+
